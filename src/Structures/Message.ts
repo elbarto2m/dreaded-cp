@@ -28,7 +28,12 @@ export class Message {
                 ? supportedMediaType.includes(Object.keys(M.message?.buttonsMessage || {})[0])
                 : supportedMediaType.includes(this.type)
         const getContent = (): string => {
-            if (M.message?.buttonsResponseMessage) return M.message?.buttonsResponseMessage?.selectedButtonId || ''
+            if (M.message?.buttonsResponseMessage)
+                return (M.message?.buttonsResponseMessage?.selectedDisplayText as string).startsWith(
+                    this.client.config.prefix
+                )
+                    ? M.message?.buttonsResponseMessage?.selectedDisplayText || ''
+                    : M.message.buttonsResponseMessage.selectedButtonId || ''
             if (M.message?.listResponseMessage)
                 return M.message?.listResponseMessage?.singleSelectReply?.selectedRowId || ''
             return M.message?.conversation
@@ -57,7 +62,11 @@ export class Message {
                 const Type = Object.keys(quotedMessage)[0] as MessageType
                 const getQuotedContent = (): string => {
                     if (quotedMessage?.buttonsResponseMessage)
-                        return quotedMessage?.buttonsResponseMessage?.selectedDisplayText || ''
+                        return (quotedMessage?.buttonsResponseMessage?.selectedDisplayText as string).startsWith(
+                            this.client.config.prefix
+                        )
+                            ? quotedMessage?.buttonsResponseMessage?.selectedDisplayText || ''
+                            : quotedMessage?.buttonsResponseMessage.selectedButtonId || ''
                     if (quotedMessage?.listResponseMessage)
                         return quotedMessage?.listResponseMessage?.singleSelectReply?.selectedRowId || ''
                     return quotedMessage?.conversation
@@ -104,6 +113,12 @@ export class Message {
     }
 
     public simplify = async (): Promise<Message> => {
+        const { username } = await this.client.DB.getUser(this.sender.jid)
+        if (username?.custom && username?.name) this.sender.username = username.name
+        if (this.quoted) {
+            const { username } = await this.client.DB.getUser(this.quoted.sender.jid)
+            if (username?.custom && username?.name) this.quoted.sender.username = username.name
+        }
         if (this.chat === 'dm') return this
         return await this.client
             .groupMetadata(this.from)
@@ -120,7 +135,7 @@ export class Message {
             .catch(() => this)
     }
 
-    get stubType(): proto.WebMessageInfo.StubType | null | undefined {
+    get stubType(): proto.WebMessageInfo.StubType | undefined | null {
         return this.M.messageStubType
     }
 
@@ -150,13 +165,17 @@ export class Message {
                 mimetype,
                 mentions,
                 fileName,
-                jpegThumbnail: thumbnail ? thumbnail.toString('base64') : undefined,
+                jpegThumbnail: thumbnail
+                    ? thumbnail.toString('base64')
+                    : type === 'image' && !thumbnail
+                    ? (content as Buffer).toString('base64')
+                    : undefined,
                 contextInfo: externalAdReply
                     ? {
                           externalAdReply
                       }
                     : undefined,
-                footer: options.sections?.length ? `Bot` : undefined,
+                footer: options.sections?.length ? '' : undefined,
                 sections: options.sections,
                 title: options.title,
                 buttonText: options.buttonText
